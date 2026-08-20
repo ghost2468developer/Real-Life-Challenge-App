@@ -1,0 +1,188 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  passwordHash  String
+  avatar        String?
+  xp            Int       @default(0)
+  level         Int       @default(1)
+  totalStreaks  Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  createdChallenges  Challenge[]          @relation("ChallengeCreator")
+  participations     ChallengeParticipant[]
+  sentRequests       Friendship[]         @relation("FriendSender")
+  receivedRequests   Friendship[]         @relation("FriendReceiver")
+  badges             UserBadge[]
+  notifications      Notification[]
+  sentInvites        ChallengeInvite[]    @relation("InviteSender")
+  receivedInvites    ChallengeInvite[]    @relation("InviteReceiver")
+}
+
+model Challenge {
+  id          String    @id @default(cuid())
+  title       String
+  description String?
+  category    Category
+  target      Float
+  unit        String
+  duration    Int       // days
+  isPublic    Boolean   @default(true)
+  emoji       String    @default("🎯")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  creatorId   String
+  creator     User      @relation("ChallengeCreator", fields: [creatorId], references: [id])
+
+  participants ChallengeParticipant[]
+  invites      ChallengeInvite[]
+}
+
+enum Category {
+  FITNESS
+  PRODUCTIVITY
+  LEARNING
+  FINANCE
+  HEALTH
+  MINDFULNESS
+  CREATIVE
+  CUSTOM
+}
+
+model ChallengeParticipant {
+  id            String    @id @default(cuid())
+  challengeId   String
+  userId        String
+  streak        Int       @default(0)
+  longestStreak Int       @default(0)
+  totalXP       Int       @default(0)
+  status        ParticipantStatus @default(ACTIVE)
+  joinedAt      DateTime  @default(now())
+  lastLogDate   DateTime?
+
+  challenge Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dailyLogs DailyLog[]
+
+  @@unique([challengeId, userId])
+}
+
+enum ParticipantStatus {
+  ACTIVE
+  COMPLETED
+  BROKEN
+  QUIT
+}
+
+model DailyLog {
+  id            String   @id @default(cuid())
+  participantId String
+  date          DateTime @db.Date
+  completed     Boolean  @default(false)
+  value         Float?
+  notes         String?
+  createdAt     DateTime @default(now())
+
+  participant ChallengeParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@unique([participantId, date])
+}
+
+model Friendship {
+  id         String         @id @default(cuid())
+  userId     String
+  friendId   String
+  status     FriendStatus   @default(PENDING)
+  createdAt  DateTime       @default(now())
+
+  user   User @relation("FriendSender", fields: [userId], references: [id], onDelete: Cascade)
+  friend User @relation("FriendReceiver", fields: [friendId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, friendId])
+}
+
+enum FriendStatus {
+  PENDING
+  ACCEPTED
+  BLOCKED
+}
+
+model Badge {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String
+  icon        String
+  criteria    String   // JSON describing unlock criteria
+  xpReward    Int      @default(50)
+  createdAt   DateTime @default(now())
+
+  users UserBadge[]
+}
+
+model UserBadge {
+  id        String   @id @default(cuid())
+  userId    String
+  badgeId   String
+  earnedAt  DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge Badge @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, badgeId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String
+  read      Boolean  @default(false)
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum NotificationType {
+  STREAK_BROKEN
+  STREAK_MILESTONE
+  FRIEND_JOINED
+  BADGE_EARNED
+  CHALLENGE_COMPLETE
+  FRIEND_REQUEST
+  CHALLENGE_INVITE
+  LEVEL_UP
+}
+
+model ChallengeInvite {
+  id          String   @id @default(cuid())
+  challengeId String
+  senderId    String
+  receiverId  String
+  status      InviteStatus @default(PENDING)
+  createdAt   DateTime @default(now())
+
+  challenge Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  sender    User      @relation("InviteSender", fields: [senderId], references: [id])
+  receiver  User      @relation("InviteReceiver", fields: [receiverId], references: [id])
+
+  @@unique([challengeId, receiverId])
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
